@@ -17,11 +17,13 @@ use std::sync::mpsc;
 
 mod io;
 mod plotter;
+mod ent;
 mod sim;
 
 use crate::io::{get_from_asciistring};
 use crate::plotter::{Chart, Color};
-use crate::sim::{Simulator, Radical, Nucleus};
+use crate::ent::{Radical, Nucleus};
+use crate::sim::{Simulator};
 
 // Menu
 pub fn build_system_menu(application: &gtk::Application) {

@@ -1,82 +1,4 @@
-use rand::prelude::*;
-
-// Param
-pub struct Param {
-    pub val: f64,  // Value; starts with 0.0
-    pub var: f64,  // Variation; starts with: 0.0
-}
-
-impl Param {
-    pub fn set(val: f64, var: f64) -> Param {
-        Param { val, var, }
-    }
-
-    fn randomize(&self) -> Param {
-        if self.var != 0.0 {
-            let mut rng = thread_rng();
-            let random: f64 = rng.gen();  // random number in range [0, 1)
-            let rnd = 2.0*random-1.0;
-            let new_val = self.val + rnd * self.var;
-            return Param { val: new_val, var: self.var }
-        } else {
-            return Param { val: self.val, var: self.var }
-        }
-    }
-}
-
-// Nucleus
-pub struct Nucleus {
-    pub spin: Param,  // Nuclear spin;
-    pub hpf: Param,  // Hyperfine constant;
-    pub eqs: Param,  // Equivalent nucleus; Should be u8!
-}
-
-impl Nucleus {
-    pub fn set(spin: f64, hpf: f64, eqs: f64) -> Nucleus {
-        Nucleus {
-            spin: Param::set(spin, 0.0),
-            hpf: Param::set(hpf, 0.0),
-            eqs: Param::set(eqs, 0.0),
-        }
-    }
-}
-
-// Radical
-pub struct Radical {
-    pub lwa: Param,  // Line width A
-    // pub lwb: Param,
-    // pub lwc: Param,
-    pub lrtz: Param,  // Lorentzian linewidth parameter (%)
-    pub amount: Param,  // Relative amount
-    pub dh1: Param,
-    pub nucs: Vec<Nucleus>,
-}
-
-impl Radical {
-    pub fn set(lwa: f64, lrtz: f64, amount: f64, dh1: f64, nucs: Vec<Nucleus>) -> Radical {
-        Radical {
-            lwa: Param::set(lwa, 0.0),
-            lrtz: Param::set(lrtz, 0.0),
-            amount: Param::set(amount, 0.0),
-            dh1: Param::set(dh1, 0.0),
-            nucs,
-        }
-    }
-
-    // Reset potentially aberrant value returned by MC function;
-    pub fn check_pars(mut rad: Radical) -> Radical {
-        if rad.lwa.val < 0.0 { rad.lwa.val = 0.0 };
-        if rad.lrtz.val < 0.0 { rad.lrtz.val = 0.0 };
-        if rad.amount.val < 0.0 { rad.amount.val = 0.0 };
-        if rad.lrtz.val > 100.0 { rad.lrtz.val = 100.0 };
-        rad
-    }
-
-    // Radical without nuclei and standard parameters;
-    pub fn electron() -> Radical {
-        Radical::set(0.5, 100.0, 100.0, 0.0, Vec::new())
-    }
-}
+use crate::ent::{Radical};
 
 pub struct Simulator {
     pub exp: Vec<f64>,  // will be array
@@ -239,5 +161,51 @@ impl Simulator {
         newteor  // return
     }  // fn calcola
 
-    
+    pub fn mc_fit(&mut self) {  // TODO: CONDITIONAL REASSIGNMENT!
+        let mut newteor = self.calcola(self.rads.clone());  // Basta prendere quello gia' calcolato, no?
+        let (mut somma, mut somma1, mut somma2): (f64, f64, f64) = (0.0, 0.0, 0.0);
+        let start: usize = 1;
+        let fine: usize = self.points as usize + 1;
+        self.iters+=1;
+
+        // Randomize Par
+
+        // Start MC
+        for j in start..fine {
+            somma1 += newteor[j].powi(2);
+            somma2 += self.exp[j].abs() * newteor[j].abs();
+        }
+
+        let norma: f64;
+        if somma1 == 0.0 { norma = 0.0 } else { norma = somma2/somma1 };
+
+        for j in start..fine {
+            newteor[j] *= norma;
+            let diff = (self.exp[j] - newteor[j]).powi(2);
+            somma+=diff;
+        }
+
+        let mut mc_rads = Vec::new();
+        let newsigma =(somma/(fine-start) as f64).sqrt();
+
+        for mut rad in self.rads.clone() {
+            rad.lwa = rad.lwa.randomize();
+            rad.amount = rad.amount.randomize();
+            rad.lrtz = rad.lrtz.randomize();
+            rad.dh1 = rad.dh1.randomize();
+
+            for mut nuc in rad.nucs.clone() {
+                nuc.hpf = nuc.hpf.randomize();
+            }
+
+            rad = Radical::check_pars(rad);  // is this legal?
+            mc_rads.push(rad);
+        }  // for rad
+
+        // Conditional reassignment
+        self.sigma = newsigma;
+
+        self.calcola(self.rads.clone());
+    }  // mc
+
 }  // impl Simulator
