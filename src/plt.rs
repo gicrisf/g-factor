@@ -1,5 +1,3 @@
-use std::iter::Zip;
-
 #[derive(Copy, Clone)]
 pub struct Color {
     r: f64,
@@ -63,12 +61,9 @@ impl Spectra {
 
         y_abs_max
     }
-
-    // pub fn data_points(&self) -> () {}
 }
 
-#[derive(Clone)]
-struct Area {
+pub struct Area {  // Pub?
     max_y: f64,
     max_x: f64,
     area_0: f64,
@@ -100,6 +95,19 @@ impl Chart {
             )
         })
         .collect()
+    }
+
+    fn plot_line(&self, cr: &cairo::Context, data: Vec<(f64, f64, f64)>) {
+        let data_window = data.windows(2);
+        for points in data_window {
+            let source = points[0];
+            let target = points[1];
+
+            // draw the line
+            cr.move_to(source.0, source.1);
+            cr.line_to(target.0, target.1);
+            cr.stroke();
+        }
     }
 
     pub fn draw(&self, cr: &cairo::Context, ord: Vec<f64>) -> gtk::Inhibit {
@@ -171,41 +179,18 @@ impl Chart {
         let (a, b, c) = self.background_color.as_tuple();
         cr.set_source_rgb(a, b, c);
         cr.paint();
-
-        let normalized_data_exp: Vec<(f64, f64, f64)> = self.normalize(&area, &asc, spectra.exp);
-
-        // Draw lines
+        // Draw exp
+        let normalized_data: Vec<(f64, f64, f64)> = self.normalize(&area, &asc, spectra.exp);
         let (a, b, c) = self.color_exp.as_tuple();
         cr.set_source_rgb(a, b, c);
         cr.set_line_width(self.line_width);
-
-        let data_window0 = normalized_data_exp.windows(2);
-        for points in data_window0 {
-            let source = points[0];
-            let target = points[1];
-
-            // draw the line
-            cr.move_to(source.0, source.1);
-            cr.line_to(target.0, target.1);
-            cr.stroke();
-        }
-
-        let normalized_data_teor: Vec<(f64, f64, f64)> = self.normalize(&area, &asc, spectra.teor);
-
+        self.plot_line(cr, normalized_data);
+        // Draw teor
+        let normalized_data: Vec<(f64, f64, f64)> = self.normalize(&area, &asc, spectra.teor);
         let (a, b, c) = self.color_teor.as_tuple();
         cr.set_source_rgb(a, b, c);
         cr.set_line_width(self.line_width);
-
-        let data_window1 = normalized_data_teor.windows(2);
-        for points in data_window1 {
-            let source = points[0];
-            let target = points[1];
-
-            // draw the line
-            cr.move_to(source.0, source.1);
-            cr.line_to(target.0, target.1);
-            cr.stroke();
-        }
+        self.plot_line(cr, normalized_data);
 
         gtk::Inhibit(false)
     }  // draw spectra

@@ -22,7 +22,7 @@ mod sim;
 
 use crate::io::{get_from_asciistring};
 use crate::plt::{Chart, Color, Spectra};
-use crate::ent::{Radical, Nucleus};
+use crate::ent::{Radical};
 use crate::sim::{Simulator};
 
 // Menu
@@ -171,18 +171,14 @@ fn main() {
     // Simulator thread
     thread::spawn(move || {
         // Get parameters from the GUI panel
-        let mut zero_rad = Radical::probe();
-        let rads = vec![zero_rad];
+        let rads = vec![Radical::probe()];
 
         // Init simulator
         let mut sim = Simulator::new();
 
-        sim.teor = sim.calcola(rads);
-        sim.exp = sim.calcola(vec![Radical::electron()]);
-        // tx_teor.send((sim.exp.clone(), sim.teor.clone())).unwrap();
         let sp = Spectra {
-            exp: sim.exp.clone(),
-            teor: sim.teor.clone(),
+            exp: sim.calcola(vec![Radical::electron()]),
+            teor: sim.calcola(rads),
         };
         tx_teor.send(sp).unwrap();
 
