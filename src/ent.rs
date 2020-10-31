@@ -79,4 +79,11 @@ impl Radical {
     pub fn electron() -> Radical {
         Radical::set(0.5, 100.0, 100.0, 0.0, Vec::new())
     }
+
+    // Debug function!
+    pub fn probe() -> Radical {
+        let mut rad = Radical::set(0.5, 100.0, 100.0, 0.0, Vec::new());
+        rad.nucs.push(Nucleus::set(1.0, 14.0, 1.0));
+        rad
+    }
 }

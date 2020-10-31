@@ -16,12 +16,12 @@ use std::thread;
 use std::sync::mpsc;
 
 mod io;
-mod plotter;
+mod plt;
 mod ent;
 mod sim;
 
 use crate::io::{get_from_asciistring};
-use crate::plotter::{Chart, Color};
+use crate::plt::{Chart, Color, Spectra};
 use crate::ent::{Radical, Nucleus};
 use crate::sim::{Simulator};
 
@@ -76,7 +76,7 @@ pub fn add_actions(
 
 fn build_ui(application: &gtk::Application,
         tx_exp: Sender<Vec<f64>>,
-        rx_teor: Arc<Mutex<Receiver<Vec<f64>>>>,
+        rx_teor: Arc<Mutex<Receiver<Spectra>>>,
         ) {
 
     let builder = gtk::Builder::from_string(include_str!("ui.glade"));
@@ -127,7 +127,7 @@ fn build_ui(application: &gtk::Application,
 
     // Draw the new teor spectrum
     da.connect_draw(move |_da: &gtk::DrawingArea, cr: &cairo::Context| {
-        chart.draw(cr, teor.clone())
+        chart.draw_spectra(cr, teor.clone())
     });
 
     // The lock is released automatically when a MutexGuard goes out of scope;
@@ -171,16 +171,20 @@ fn main() {
     // Simulator thread
     thread::spawn(move || {
         // Get parameters from the GUI panel
-        let mut zero_rad = Radical::electron();
-        zero_rad.nucs.push(Nucleus::set(1.0, 14.0, 1.0));
-        let mut rads = Vec::new();
-        rads.push(zero_rad);
+        let mut zero_rad = Radical::probe();
+        let rads = vec![zero_rad];
 
         // Init simulator
         let mut sim = Simulator::new();
 
         sim.teor = sim.calcola(rads);
-        tx_teor.send(sim.teor.clone()).unwrap();
+        sim.exp = sim.calcola(vec![Radical::electron()]);
+        // tx_teor.send((sim.exp.clone(), sim.teor.clone())).unwrap();
+        let sp = Spectra {
+            exp: sim.exp.clone(),
+            teor: sim.teor.clone(),
+        };
+        tx_teor.send(sp).unwrap();
 
         loop {
             sim.exp = rx_exp.recv().unwrap();
