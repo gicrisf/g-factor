@@ -94,9 +94,9 @@ fn build_ui(application: &gtk::Application,
         width: 1000.0,
         height: 600.0,
         padding: 0.0,
-        background_color: Color::rgb(1.0, 46.0, 64.0),  // Dark Cyan
-        color_exp: Color::rgb(79.0, 134.0, 140.0),  // Light Cyan
-        color_teor: Color::rgb(203.0, 75.0, 22.0),  // Orange
+        background_color: Color::original("DarkCyan"),
+        color_exp: Color::original("LightCyan"),
+        color_teor: Color::solarized("Orange"),
         line_width: 1.25,
     };
 
@@ -111,7 +111,7 @@ fn build_ui(application: &gtk::Application,
 
         // Draw experimental spectrum
         da1.connect_draw(move |_da: &gtk::DrawingArea, cr: &cairo::Context| {
-            chart.draw(cr, new_exp.clone())
+            chart.draw_spectra(cr, Spectra { exp: new_exp.clone(), teor: Vec::new() })
         });
 
         // Returning false here would close the receiver
