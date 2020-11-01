@@ -79,12 +79,18 @@ fn build_ui(application: &gtk::Application,
         rx_teor: Arc<Mutex<Receiver<Spectra>>>,
         ) {
 
+    // CHANNELS
+    // Create a simple glib streaming channel
+    let (sender, on_open_glib_receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+    // Call the mutex lock to get the MutexGuard of teor receiver;
+    let rx_teor_guard = rx_teor.lock().unwrap();
+    // MutexGuard is wrapped in a LockResult that we handle with the call to unwrap;
+    let spectra = rx_teor_guard.recv().unwrap();
+
+    // UI
     let builder = gtk::Builder::from_string(include_str!("ui.glade"));
     let win: gtk::ApplicationWindow = builder.get_object("application_window").expect("err build win");
     win.set_application(Some(application));
-
-    // Create a simple glib streaming channel
-    let (sender, on_open_glib_receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
 
     // DrawingArea
     let da: gtk::DrawingArea =
@@ -101,17 +107,17 @@ fn build_ui(application: &gtk::Application,
     };
 
     let da1 = da.clone();  // Pass to the next function
-
+    let spectra2 = spectra.clone();
     // Opening a file...
     on_open_glib_receiver.attach(None, move |msg: String| {
         let new_exp: &str = &msg[..];  // String to &str
         let new_exp = get_from_asciistring(new_exp);  // Extract intensity vector
 
         tx_exp.send(new_exp.clone()).unwrap();  // Send vector to simulator
-
+        let spectra1 = spectra2.clone();
         // Draw experimental spectrum
         da1.connect_draw(move |_da: &gtk::DrawingArea, cr: &cairo::Context| {
-            chart.draw_spectra(cr, Spectra { exp: new_exp.clone(), teor: Vec::new() })
+            chart.draw_spectra(cr, Spectra { exp: new_exp.clone(), teor: spectra1.clone().teor })
         });
 
         // Returning false here would close the receiver
@@ -119,15 +125,10 @@ fn build_ui(application: &gtk::Application,
         glib::Continue(true)
     });
 
-    // Call the mutex lock to get the MutexGuard;
-    let rx_teor_guard = rx_teor.lock().unwrap();
-
-    // MutexGuard is wrapped in a LockResult that we handle with the call to unwrap;
-    let teor = rx_teor_guard.recv().unwrap();
-
     // Draw the new teor spectrum
+    let spectra3 = spectra.clone();
     da.connect_draw(move |_da: &gtk::DrawingArea, cr: &cairo::Context| {
-        chart.draw_spectra(cr, teor.clone())
+        chart.draw_spectra(cr, Spectra { exp: Vec::new(), teor: spectra3.clone().teor })
     });
 
     // The lock is released automatically when a MutexGuard goes out of scope;
