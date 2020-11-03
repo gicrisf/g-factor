@@ -12,3 +12,4 @@ gio = "0.9.1"
 cairo-sys-rs = "0.10.0"
 cairo-rs = { version = "0.9.1" }
 rand = "0.7.3"
+tokio = { version = "0.3", features = ["full"] }

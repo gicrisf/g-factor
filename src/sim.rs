@@ -1,4 +1,5 @@
 use crate::ent::{Radical};
+use std::sync::mpsc::{Sender};
 
 pub struct Simulator {
     pub exp: Vec<f64>,  // will be array
@@ -9,10 +10,11 @@ pub struct Simulator {
     pub sigma: f64,  // Starts from 1E+20
     pub iters: usize,  // MC iterations
     pub mc_go: bool,  // Is the MC going?
+    pub tx: Sender<f64>,
 }
 
 impl Simulator {
-    pub fn new() -> Simulator {
+    pub fn new(tx: Sender<f64>) -> Simulator {
         Simulator {
             exp: Vec::new(),
             teor: Vec::new(), // vec![0.0; self.points],
@@ -22,6 +24,7 @@ impl Simulator {
             sigma: 1E+20,
             iters: 0,
             mc_go: false,
+            tx,
         }
     }
 
