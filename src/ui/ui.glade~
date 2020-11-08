@@ -34,6 +34,10 @@
             <property name="height_request">600</property>
             <property name="visible">True</property>
             <property name="can_focus">False</property>
+            <property name="margin_left">10</property>
+            <property name="margin_right">10</property>
+            <property name="margin_top">10</property>
+            <property name="margin_bottom">10</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -53,7 +57,7 @@
             <property name="homogeneous">True</property>
             <property name="layout_style">start</property>
             <child>
-              <object class="GtkButton">
+              <object class="GtkButton" id="settings_btn">
                 <property name="label" translatable="yes">Settings</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -67,7 +71,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton">
+              <object class="GtkButton" id="mc_go_btn">
                 <property name="label" translatable="yes">Start MC</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -99,6 +103,15 @@
           </packing>
         </child>
       </object>
+    </child>
+  </object>
+  <object class="GtkWindow" id="settings_win">
+    <property name="can_focus">False</property>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child>
+      <placeholder/>
     </child>
   </object>
 </interface>

@@ -1,36 +1,36 @@
 use crate::ent::{Radical};
-use std::sync::mpsc::{Sender};
+use std::sync::{Arc, Mutex};
 
+#[derive(Clone)]
 pub struct Simulator {
-    pub exp: Vec<f64>,  // will be array
-    pub teor: Vec<f64>,
+    pub exp: Arc<Mutex<Vec<f64>>>,  // will be array
+    pub teor: Arc<Mutex<Vec<f64>>>,
     pub points: f64,  // TODO get from exp!
-    pub sweep: f64,
-    pub rads: Vec<Radical>,
+    pub sweep: Arc<Mutex<f64>>,
+    pub rads: Arc<Mutex<Vec<Radical>>>,
     pub sigma: f64,  // Starts from 1E+20
     pub iters: usize,  // MC iterations
-    pub mc_go: bool,  // Is the MC going?
-    pub tx: Sender<f64>,
+    pub mc_go: Arc<Mutex<bool>>,  // Is the MC going?
 }
 
 impl Simulator {
-    pub fn new(tx: Sender<f64>) -> Simulator {
+    pub fn new() -> Simulator {
         Simulator {
-            exp: Vec::new(),
-            teor: Vec::new(), // vec![0.0; self.points],
+            exp: Arc::new(Mutex::new(Vec::new())),
+            teor: Arc::new(Mutex::new(Vec::new())), // vec![0.0; self.points],
             points: 1024.0,  // self.exp.len(),
-            sweep: 100.0,
-            rads: Vec::new(),
+            sweep: Arc::new(Mutex::new(100.0)),
+            rads: Arc::new(Mutex::new(Vec::new())),
             sigma: 1E+20,
             iters: 0,
-            mc_go: false,
-            tx,
+            mc_go: Arc::new(Mutex::new(false)),
         }
     }
 
     // Calculate teorical spectra
     pub fn calcola(&self, rads: Vec<Radical>) -> Vec<f64> {
-        let incrgauss = self.sweep/(self.points -1.0);
+        let sweep = self.sweep.lock().unwrap();
+        let incrgauss = *sweep/(self.points -1.0);
         let mut lno = vec![0.0; self.points as usize];
         let mut newteor = vec![0.0; self.points as usize];
 
@@ -115,7 +115,7 @@ impl Simulator {
             let mut t1 = (-0.02)*(t2.powi(3))*rad.amount.val*rad.lrtz.val /
                 (totale as f64*std::f64::consts::PI);  // Gaussian lineshape
 
-            let mut w2 = -(self.sweep as f64)/2.0;
+            let mut w2 = -(*sweep as f64)/2.0;
 
             let mut point = 1;
             while point < self.points as usize {
@@ -127,7 +127,7 @@ impl Simulator {
                 point+=1;  // Increment point
             }  // for (j=1;j<=punti;j++)
 
-            w2 = -(self.sweep as f64)/2.0; // reset w2
+            w2 = -(*sweep as f64)/2.0; // reset w2
             t2 = 2.0/rad.lwa.val;  // change t2
 
             t1 = -rad.amount.val*(t2.powi(3))*0.01*(100.0-rad.lrtz.val)/
@@ -165,18 +165,21 @@ impl Simulator {
     }  // fn calcola
 
     pub fn mc_fit(&mut self) {  // TODO: CONDITIONAL REASSIGNMENT!
-        let mut newteor = self.calcola(self.rads.clone());  // Basta prendere quello gia' calcolato, no?
+        let rads = self.rads.lock().unwrap(); // RICONTROLLARE!
+        let mut newteor = self.calcola((&rads).to_vec());  // Basta prendere quello gia' calcolato, no?
         let (mut somma, mut somma1, mut somma2): (f64, f64, f64) = (0.0, 0.0, 0.0);
         let start: usize = 1;
         let fine: usize = self.points as usize + 1;
         self.iters+=1;
+
+        let mut exp = self.exp.lock().unwrap();
 
         // Randomize Par
 
         // Start MC
         for j in start..fine {
             somma1 += newteor[j].powi(2);
-            somma2 += self.exp[j].abs() * newteor[j].abs();
+            somma2 += exp[j].abs() * newteor[j].abs();
         }
 
         let norma: f64;
@@ -184,14 +187,14 @@ impl Simulator {
 
         for j in start..fine {
             newteor[j] *= norma;
-            let diff = (self.exp[j] - newteor[j]).powi(2);
+            let diff = (exp[j] - newteor[j]).powi(2);
             somma+=diff;
         }
 
         let mut mc_rads = Vec::new();
         let newsigma =(somma/(fine-start) as f64).sqrt();
 
-        for mut rad in self.rads.clone() {
+        for mut rad in (&rads).to_vec() {
             rad.lwa = rad.lwa.randomize();
             rad.amount = rad.amount.randomize();
             rad.lrtz = rad.lrtz.randomize();
@@ -208,7 +211,7 @@ impl Simulator {
         // Conditional reassignment
         self.sigma = newsigma;
 
-        self.calcola(self.rads.clone());
+        self.calcola((&rads).to_vec());
     }  // mc
 
 }  // impl Simulator

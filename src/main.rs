@@ -7,37 +7,30 @@ use gtk::prelude::*;
 
 use std::env::args;
 
-// use std::sync::mpsc;
-// use std::sync::mpsc::{Sender, Receiver};
-// use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-// use std::thread;
+// use std::sync::{Arc, Mutex};
+use std::thread;
 
 mod io;
 mod plt;
-// mod ent;
-// mod sim;
+mod ent;
+mod sim;
 mod ui;
 
 use crate::ui::ui::{Gui};
 use crate::plt::{Chart, Color};
-// use crate::ent::{Radical};
-// use crate::sim::{Simulator};
+use crate::sim::{Simulator};
+use crate::ent::{Radical};
 
 fn main_app(app: &gtk::Application) {
-    /*
-    // Sender/Receiver
-    let (tx, rx) = mpsc::channel();
 
-    // Simulator
-    let mut sim = Simulator::new(tx);
-    let locked_sim = Arc::new(Mutex::new(sim));
-    let cloned_sim = Arc::clone(&locked_sim);
+    let sim = Simulator::new();
 
     // Simulator thread
-    thread::spawn(move || {
-        start_tokio(locked_sim, rx);
+    let sim1 = sim.clone();
+    let _sim_thread = thread::spawn(move || {
+        let mut m = sim1.teor.lock().unwrap();
+        *m = sim1.calcola(vec![Radical::probe(), Radical::electron()]);
     });
-    */
 
     let chart = Chart {
         width: 1000.0,
@@ -49,9 +42,10 @@ fn main_app(app: &gtk::Application) {
         line_width: 1.25,
     };
 
-    // Start GUI and connect it with signals and actions;
-    let gui = Gui::new(chart);
+    // Start GUI
+    let gui = Gui::new(chart, sim);
     gui.win.set_application(Some(app));
+    gui.connect_buttons();
 
     // Create Menu
     let menu_bar = gui.build_menu();
@@ -69,7 +63,3 @@ fn main() {
     application.connect_activate(move |app| { main_app(app) });
     application.run(&args().collect::<Vec<_>>());
 }
-
-
-// #[tokio::main]
-// async fn start_tokio<'a>(sim: Arc<Mutex<Simulator>>, rx: Receiver<f64>) {}
