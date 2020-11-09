@@ -1,7 +1,8 @@
 use rand::prelude::*;
+use serde::{Serialize, Deserialize};
 
 // Param
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Param {
     pub val: f64,  // Value; starts with 0.0
     pub var: f64,  // Variation; starts with: 0.0
@@ -26,7 +27,7 @@ impl Param {
 }
 
 // Nucleus
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Nucleus {
     pub spin: Param,  // Nuclear spin;
     pub hpf: Param,  // Hyperfine constant;
@@ -44,7 +45,7 @@ impl Nucleus {
 }
 
 // Radical
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Radical {
     pub lwa: Param,  // Line width A
     // pub lwb: Param,

@@ -23,6 +23,7 @@ pub struct Gui {
     pub win: gtk::ApplicationWindow,
     pub drawing_area: gtk::DrawingArea,
     pub open_sender: glib::Sender<String>,
+    pub settings_sender: glib::Sender<(usize, Radical)>,
     pub sim: Simulator,
     pub chart: Chart,
 }
@@ -50,6 +51,7 @@ impl Gui {
 
         // Create a simple glib streaming channel
         let (open_sender, open_receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+        let (settings_sender, settings_receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
         let da = drawing_area.clone();  // Pass to the next function. TODO: remove
         // Opening a file...
         let sim1 = sim.clone();
@@ -66,11 +68,17 @@ impl Gui {
             glib::Continue(true)
         });
 
+        settings_receiver.attach(None, move |new_rad: (usize, Radical)| {
+            println!("{}", serde_json::to_string(&new_rad).unwrap());
+            glib::Continue(true)
+        });
+
         Self {
             builder,
             win,
             drawing_area,
             open_sender,
+            settings_sender,
             sim,
             chart,
         }  // return Gui
@@ -130,6 +138,7 @@ impl Gui {
         let radicals_guard = self.sim.rads.lock().unwrap();
         let radicals_clone = radicals_guard.clone();
         let settings_btn_clone = settings_btn.clone();
+        let settings_sender = self.settings_sender.clone();
         // On clicked button
         settings_btn.connect_clicked(move |_| {
             let settings_win: gtk::Window = gtk::Window::new(gtk::WindowType::Toplevel);
@@ -140,8 +149,10 @@ impl Gui {
             // Store Rad index VS gtk Grid
             let mut boxes: HashMap<usize, gtk::Box> = HashMap::new();
 
+            let settings_sender_1 = settings_sender.clone();
+
             for (idx, rad) in radicals_clone.iter().enumerate() {
-                let (content, tab) = create_page(&idx, rad);
+                let (content, tab) = create_page(idx, rad, settings_sender_1.clone());
                 boxes.insert(idx, content.rad_box);
                 notebook.append_page(&boxes[&idx], Some(&tab.tab_box));
             }
