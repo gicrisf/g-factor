@@ -6,13 +6,11 @@ extern crate gtk;
 use gio::prelude::*;  // WARNING: unused
 use gtk::prelude::*;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use crate::ent::{Radical};
 
-pub struct Tab {
-    pub tab_box: gtk::Box,
-    button: gtk::Button,
-}
+pub struct Tab { pub tab_box: gtk::Box, button: gtk::Button }
 
 impl Tab {
     pub fn new(label: &str) -> Self {
@@ -38,18 +36,14 @@ impl Tab {
     }
 }
 
-pub struct EntryPar {
-    buffer: gtk::EntryBuffer,
-    widget: gtk::Entry,
-}
+pub struct EntryPar { buffer: gtk::EntryBuffer, widget: gtk::Entry }
 
 impl EntryPar {
-    pub fn new(val: f64,
-        field: String, sub_field: String, position: (gtk::Grid, i32, i32)) -> Self {
+    pub fn new(val: f64, field: String, sub_field: String, pos: (gtk::Grid, i32, i32)) -> Self {
 
         let buffer =  gtk::EntryBuffer::new(Some(&val.to_string()));  // make buffer
         let widget = gtk::Entry::with_buffer(&buffer);  // make entry widget
-        position.0.attach(&widget, position.1, position.2, 1, 1);  // attach widget to the grid
+        pos.0.attach(&widget, pos.1, pos.2, 1, 1);  // attach widget to the grid
 
         Self { buffer, widget }  // return
     }
@@ -58,15 +52,19 @@ impl EntryPar {
 pub struct Content { pub rad_box: gtk::Box }
 
 impl Content {
-    fn new(rad_idx: usize,
-        rad: &Radical, rad_sender: glib::Sender<(usize, Radical)>) -> Self {
+    fn new(
+        rad_idx: usize,
+        rad: &Radical,
+        // rad_idx, field, subfield, new value
+        radpar_sender: glib::Sender<(usize, String, String, f64)>,
+        // rad_idx, nuc_idx, field, subfield, new value
+        nucpar_sender: glib::Sender<(usize, usize, String, String, f64)>,
+    ) -> Self {
 
         let builder = gtk::Builder::from_string(include_str!("settings.glade"));
         let rad_box: gtk::Box = builder.get_object("rad_box").expect("err building rad_box");
         let rad_grid: gtk::Grid = builder.get_object("rad_grid").expect("err building rad_grid");
         let nuc_grid: gtk::Grid = builder.get_object("nucs_grid").expect("err building nuc_grid");
-
-        let rad_clone = rad.clone();  // RAD CLONE 00
 
         let radpar_names = [
             ("amount", "val"), ("amount", "var"),
@@ -76,7 +74,6 @@ impl Content {
             ];
 
         for par_name in radpar_names.iter() {
-
             let par_name_clone = par_name.clone();  // PAR NAME CLONE 00
 
             let (row, par) = match par_name.0 {
@@ -100,10 +97,8 @@ impl Content {
                 (rad_grid.clone(), col, row)
             );
 
-            let rad_sender_clone = rad_sender.clone();  // SENDER CLONE 00
-            let buffer = entrypar.buffer.clone();  // BUFFER CLONE 00
-            let rad_clone_1 = rad_clone.clone(); // RAD CLONE 01
-
+            let buffer = entrypar.buffer.clone();  // BUFFER CLONE
+            let radpar_sender_clone = radpar_sender.clone();  // SENDER CLONE
             &entrypar.widget.connect_changed(move|_| {
                 let new_val: Result<f64, std::num::ParseFloatError> =
                     buffer
@@ -116,33 +111,18 @@ impl Content {
                     Err(error) => 0.0,  // TODO: get old value and reset entry
                 };
 
-                let mut rad_clone_2 = rad_clone_1.clone();  // RAD CLONE 02
-
-                match par_name_clone {
-                   ("amount", "val") => rad_clone_2.amount.val = new_val,
-                   ("amount", "var") => rad_clone_2.amount.var = new_val,
-                   ("dh1", "val") => rad_clone_2.dh1.val = new_val,
-                   ("dh1", "var") => rad_clone_2.dh1.var = new_val,
-                   ("lwa", "val") => rad_clone_2.lwa.val = new_val,
-                   ("lwa", "var") => rad_clone_2.lwa.var = new_val,
-                   ("lrtz", "val") => rad_clone_2.lrtz.val = new_val,
-                   ("lrtz", "var") => rad_clone_2.lrtz.var = new_val,
-                   _ => panic!("unknown field"),
-               };
-
-               // Generate and send new radical!
-               let new_rad = (rad_idx, rad_clone_2);
-               rad_sender_clone.send(new_rad);  // ERROR MANAGEMENT NEEDED
+               let exp_radpar = (
+                   rad_idx,
+                   String::from(par_name_clone.0),
+                   String::from(par_name_clone.1),
+                   new_val
+               );
+               radpar_sender_clone.send(exp_radpar);
             }); // Connect changed
         }  // for radpar name in radpas_names
 
         // Nucs
-        let rad_clone_1 = rad_clone.clone();  // RAD CLONE 01 bis
-
         for (nuc_idx, nuc) in rad.nucs.iter().enumerate() {
-
-            let rad_clone_2 = rad_clone_1.clone();  // RAD CLONE 02
-
             let nucpar_names = [
                 ("eqs", "val"),
                 ("spin", "val"),
@@ -151,8 +131,6 @@ impl Content {
                 ];
 
             for (par_idx, par_name) in nucpar_names.iter().enumerate() {
-
-                let rad_clone_3 = rad_clone_2.clone();  // RAD CLONE 03
                 let par_name_clone = par_name.clone();  // PAR NAME CLONE 00 bis
 
                 let par = match par_name.0 {
@@ -175,13 +153,9 @@ impl Content {
                     (nuc_grid.clone(), par_idx as i32, 1)
                 );
 
-                let rad_sender_clone = rad_sender.clone();  // SENDER CLONE 00 bis
-                let buffer = entrypar.buffer.clone();  // BUFFER CLONE 00 bis
-
+                let buffer = entrypar.buffer.clone();  // BUFFER CLONE
+                let nucpar_sender_clone = nucpar_sender.clone();  // SENDER CLONE
                 &entrypar.widget.connect_changed(move|_| {
-
-                    let mut rad_clone_4 = rad_clone_3.clone();  // RAD CLONE 04
-
                     let new_val: Result<f64, std::num::ParseFloatError> =
                         buffer
                         .get_text()  // from buffer
@@ -193,17 +167,15 @@ impl Content {
                         Err(error) => 0.0,  // TODO: get old value and reset entry
                     };
 
-                    match par_name_clone {
-                       ("eqs", "val") => rad_clone_4.nucs[nuc_idx].eqs.val = new_val,
-                       ("spin", "val") => rad_clone_4.nucs[nuc_idx].spin.val = new_val,
-                       ("hpf", "val") => rad_clone_4.nucs[nuc_idx].hpf.val = new_val,
-                       ("hpf", "var") => rad_clone_4.nucs[nuc_idx].hpf.var = new_val,
-                       _ => panic!("unknown field"),
-                   };
+                    let exp_nucpar = (
+                        rad_idx,
+                        nuc_idx,
+                        String::from(par_name_clone.0),
+                        String::from(par_name_clone.1),
+                        new_val
+                    );
 
-                   // Generate and send new radical!
-                   let new_rad = (rad_idx, rad_clone_4);
-                   rad_sender_clone.send(new_rad);  // ERROR MANAGEMENT NEEDED
+                    nucpar_sender_clone.send(exp_nucpar);
                 }); // Connect changed
             }  // for name in nucpar names
         }  // for nuc in nucs
@@ -217,40 +189,28 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new(rads: Vec<Radical>, settings_sender: glib::Sender<Vec<Radical>>) -> Self {
+    pub fn new(
+        rads: Arc<Mutex<Vec<Radical>>>,
+        nucpar_sender: glib::Sender<(usize, usize, String, String, f64)>,
+        radpar_sender: glib::Sender<(usize, String, String, f64)>,
+        ) -> Self {
+
         let window: gtk::Window = gtk::Window::new(gtk::WindowType::Toplevel);
         let notebook = gtk::Notebook::new();
 
-        // Store gtk tabs and inner grids with rad values in a Hashmap
-        // Must put this variable in the main struct ! ALERT
-        // Store Rad index VS gtk Grid
-        let mut boxes: HashMap<usize, gtk::Box> = HashMap::new();  // utile a qualcuno?
+        let rads_guard = Arc::clone(&rads);
+        let mut rads_guard_clone = rads_guard.lock().unwrap().clone();
 
-        let (rad_sender, rad_receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let settings_sender_clone = settings_sender.clone();
-        let mut rad_new = rads.clone();
-
-        for (idx, rad) in rads.iter().enumerate() {
+        for (idx, rad) in rads_guard_clone.iter().enumerate() {
             let tab = Tab::new(&("Radical ".to_owned() + &idx.to_string()));
-            let content = Content::new(idx, rad, rad_sender.clone());
-            boxes.insert(idx, content.rad_box);  // utile a qualcuno?
-            notebook.append_page(&boxes[&idx], Some(&tab.tab_box));
+            let content = Content::new(idx, rad, radpar_sender.clone(), nucpar_sender.clone());
+            notebook.append_page(&content.rad_box, Some(&tab.tab_box));
         }
 
         window.add(&notebook);
         window.set_title("g Factor - Radicals");
         window.set_position(gtk::WindowPosition::Center);
         window.show_all();
-
-        // Receiver aggregate radicals and sends to main program
-
-        rad_receiver.attach(None, move |new_rad: (usize, Radical)| {
-            // println!("{}", serde_json::to_string(&new_rad).unwrap());
-            rad_new[new_rad.0] = new_rad.1;
-            settings_sender.send(rad_new.clone());  // ERROR MANAGEMENT!
-            glib::Continue(true)
-        });
-
         Self { window }
     }
 }

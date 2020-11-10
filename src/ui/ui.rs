@@ -23,7 +23,8 @@ pub struct Gui {
     pub win: gtk::ApplicationWindow,
     pub drawing_area: gtk::DrawingArea,
     pub open_sender: glib::Sender<String>,
-    pub settings_sender: glib::Sender<Vec<Radical>>,
+    pub nucpar_sender: glib::Sender<(usize, usize, String, String, f64)>,
+    pub radpar_sender: glib::Sender<(usize, String, String, f64)>,
     pub sim: Simulator,
     pub chart: Chart,
 }
@@ -43,7 +44,7 @@ impl Gui {
 
         let sim_rads = Arc::clone(&sim.rads);
         let mut sim_rads_guard = sim_rads.lock().unwrap();
-        sim_rads_guard.retain(|_e| false);  // Erase all
+        // sim_rads_guard.retain(|_e| false);  // Erase all
         sim_rads_guard.push(Radical::probe());
         sim_rads_guard.push(Radical::electron());
 
@@ -53,10 +54,13 @@ impl Gui {
 
         let (open_sender, open_receiver) =
             glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let (settings_sender, settings_receiver) =
+        let (radpar_sender, radpar_receiver) =
+            glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+        let (nucpar_sender, nucpar_receiver) =
             glib::MainContext::channel(glib::PRIORITY_DEFAULT);
 
-        let da = drawing_area.clone();  // Pass to the next function. TODO: remove
+
+        // let da = drawing_area.clone();  // Pass to the next function. TODO: remove
         // Opening a file...
         let sim_clone = sim.clone();
         open_receiver.attach(None, move |msg: String| {
@@ -72,13 +76,20 @@ impl Gui {
             glib::Continue(true)
         });
 
+        // Receive and change Params!
         let sim_rads_clone = Arc::clone(&sim.rads);
+        radpar_receiver.attach(None, move |new_par: (usize, String, String, f64)| {
+            // Debugger
+            // println!("Radical n.{}\n{}\n{}\n{}\n", new_par.0, new_par.1, new_par.2, new_par.3);
+            let mut rads = sim_rads_clone.lock().unwrap();
+            rads[new_par.0] = rads[new_par.0].set_radpar(new_par.1, new_par.2, new_par.3);
+            glib::Continue(true)
+        });
 
-        settings_receiver.attach(None, move |new_rads: Vec<Radical>| {
-            println!("NEW RADS:\n{:?}", new_rads);
-            sim_rads_clone.lock().unwrap().retain(|_e| false);  // Erase all
-            sim_rads_clone.lock().unwrap().extend_from_slice(&new_rads);  // Add all new rads
-            println!("RISULTATO:\n{:?}", *sim_rads_clone.lock().unwrap());
+        let sim_rads_clone = Arc::clone(&sim.rads);
+        nucpar_receiver.attach(None, move |signal: (usize, usize, String, String, f64)| {
+            let mut rads = sim_rads_clone.lock().unwrap();
+            rads[signal.0] = rads[signal.0].set_nucpar(signal.1, signal.2, signal.3, signal.4);
             glib::Continue(true)
         });
 
@@ -87,7 +98,8 @@ impl Gui {
             win,
             drawing_area,
             open_sender,
-            settings_sender,
+            nucpar_sender,
+            radpar_sender,
             sim,
             chart,
         }  // return Gui
@@ -144,14 +156,20 @@ impl Gui {
         let settings_btn: gtk::Button =
             self.builder.get_object("settings_btn").expect("err building settings_btn");
 
-        let radicals = Arc::clone(&self.sim.rads);
+        // let radicals = Arc::clone(&self.sim.rads);
 
         let settings_btn_clone = settings_btn.clone();  // SETs BTN CLONE 00
-        let settings_sender = self.settings_sender.clone();
+        let nucpar_sender = self.nucpar_sender.clone();
+        let radpar_sender = self.radpar_sender.clone();
+        let arc_rads_clone = self.sim.rads.clone();
 
         // On clicked button
         settings_btn.connect_clicked(move |_| {
-            let settings = Settings::new(radicals.lock().unwrap().clone(), settings_sender.clone());
+            let settings = Settings::new(
+                Arc::clone(&arc_rads_clone),
+                nucpar_sender.clone(),
+                radpar_sender.clone(),
+            );
 
             let settings_btn_clone_1 = settings_btn_clone.clone();  // SETs BTN CLONE 01
             settings_btn_clone.set_sensitive(false); // Ghosting button

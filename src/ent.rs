@@ -57,14 +57,48 @@ pub struct Radical {
 }
 
 impl Radical {
-    pub fn set(lwa: f64, lrtz: f64, amount: f64, dh1: f64, nucs: Vec<Nucleus>) -> Radical {
-        Radical {
+    pub fn set(lwa: f64, lrtz: f64, amount: f64, dh1: f64, nucs: Vec<Nucleus>) -> Self {
+        Self {
             lwa: Param::set(lwa, 0.0),
             lrtz: Param::set(lrtz, 0.0),
             amount: Param::set(amount, 0.0),
             dh1: Param::set(dh1, 0.0),
             nucs,
         }
+    }
+
+    // Set Radical Param through strings
+    pub fn set_radpar(&self, fld: String, subfld: String, new_val: f64) -> Self {
+        let mut self_clone = self.clone();
+
+        match (fld.as_str(), subfld.as_str()) {
+           ("amount", "val") => self_clone.amount.val = new_val,
+           ("amount", "var") => self_clone.amount.var = new_val,
+           ("dh1", "val") => self_clone.dh1.val = new_val,
+           ("dh1", "var") => self_clone.dh1.var = new_val,
+           ("lwa", "val") => self_clone.lwa.val = new_val,
+           ("lwa", "var") => self_clone.lwa.var = new_val,
+           ("lrtz", "val") => self_clone.lrtz.val = new_val,
+           ("lrtz", "var") => self_clone.lrtz.var = new_val,
+           _ => panic!("unknown field"),
+       };
+
+       self_clone
+    }
+
+    // Set Nucleus parameter through strings
+    pub fn set_nucpar(&self, nuc_idx: usize, fld: String, subfld: String, new_val: f64) -> Self {
+        let mut self_clone = self.clone();
+
+        match (fld.as_str(), subfld.as_str()) {
+           ("eqs", "val") => self_clone.nucs[nuc_idx].eqs.val = new_val,
+           ("spin", "val") => self_clone.nucs[nuc_idx].spin.val = new_val,
+           ("hpf", "val") => self_clone.nucs[nuc_idx].hpf.val = new_val,
+           ("hpf", "var") => self_clone.nucs[nuc_idx].hpf.var = new_val,
+           _ => panic!("unknown field"),
+       };
+
+       self_clone
     }
 
     // Reset potentially aberrant value returned by MC function;
