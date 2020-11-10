@@ -9,13 +9,13 @@ use gtk::prelude::*;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::io::{get_from_asciistring};
 use crate::plt::{Chart, Spectra};
 use crate::sim::{Simulator};
 use crate::ent::{Radical};
-use crate::ui::settings::{create_page};
+use crate::ui::settings::{Settings};
 
 pub struct Gui {
     // Main window
@@ -23,7 +23,7 @@ pub struct Gui {
     pub win: gtk::ApplicationWindow,
     pub drawing_area: gtk::DrawingArea,
     pub open_sender: glib::Sender<String>,
-    pub settings_sender: glib::Sender<(usize, Radical)>,
+    pub settings_sender: glib::Sender<Vec<Radical>>,
     pub sim: Simulator,
     pub chart: Chart,
 }
@@ -41,24 +41,28 @@ impl Gui {
         win.set_position(gtk::WindowPosition::Center);
         win.show_all();
 
-        let sim1 = sim.clone();
-        let mut sim_rads = sim1.rads.lock().unwrap();
-        *sim_rads = vec![Radical::probe(), Radical::electron()];
+        let sim_rads = Arc::clone(&sim.rads);
+        let mut sim_rads_guard = sim_rads.lock().unwrap();
+        sim_rads_guard.retain(|_e| false);  // Erase all
+        sim_rads_guard.push(Radical::probe());
+        sim_rads_guard.push(Radical::electron());
 
         // Drawing Area
         let drawing_area: gtk::DrawingArea =
             builder.get_object("drawing_area").expect("err building drawing_area");
 
-        // Create a simple glib streaming channel
-        let (open_sender, open_receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let (settings_sender, settings_receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+        let (open_sender, open_receiver) =
+            glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+        let (settings_sender, settings_receiver) =
+            glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
         let da = drawing_area.clone();  // Pass to the next function. TODO: remove
         // Opening a file...
-        let sim1 = sim.clone();
+        let sim_clone = sim.clone();
         open_receiver.attach(None, move |msg: String| {
             let new_exp: &str = &msg[..];  // String to &str
             let new_exp = get_from_asciistring(new_exp);  // Extract intensity vector
-            let mut exp_mut = sim1.exp.lock().unwrap();
+            let mut exp_mut = sim_clone.exp.lock().unwrap();
             *exp_mut = new_exp;  // Pass it to simulator
 
             // TODO: Draw
@@ -68,8 +72,13 @@ impl Gui {
             glib::Continue(true)
         });
 
-        settings_receiver.attach(None, move |new_rad: (usize, Radical)| {
-            println!("{}", serde_json::to_string(&new_rad).unwrap());
+        let sim_rads_clone = Arc::clone(&sim.rads);
+
+        settings_receiver.attach(None, move |new_rads: Vec<Radical>| {
+            println!("NEW RADS:\n{:?}", new_rads);
+            sim_rads_clone.lock().unwrap().retain(|_e| false);  // Erase all
+            sim_rads_clone.lock().unwrap().extend_from_slice(&new_rads);  // Add all new rads
+            println!("RISULTATO:\n{:?}", *sim_rads_clone.lock().unwrap());
             glib::Continue(true)
         });
 
@@ -135,42 +144,24 @@ impl Gui {
         let settings_btn: gtk::Button =
             self.builder.get_object("settings_btn").expect("err building settings_btn");
 
-        let radicals_guard = self.sim.rads.lock().unwrap();
-        let radicals_clone = radicals_guard.clone();
-        let settings_btn_clone = settings_btn.clone();
+        let radicals = Arc::clone(&self.sim.rads);
+
+        let settings_btn_clone = settings_btn.clone();  // SETs BTN CLONE 00
         let settings_sender = self.settings_sender.clone();
+
         // On clicked button
         settings_btn.connect_clicked(move |_| {
-            let settings_win: gtk::Window = gtk::Window::new(gtk::WindowType::Toplevel);
-            let notebook = gtk::Notebook::new();
+            let settings = Settings::new(radicals.lock().unwrap().clone(), settings_sender.clone());
 
-            // Store gtk tabs and inner grids with rad values in a Hashmap
-            // Must put this variable in the main struct ! ALERT
-            // Store Rad index VS gtk Grid
-            let mut boxes: HashMap<usize, gtk::Box> = HashMap::new();
+            let settings_btn_clone_1 = settings_btn_clone.clone();  // SETs BTN CLONE 01
+            settings_btn_clone.set_sensitive(false); // Ghosting button
 
-            let settings_sender_1 = settings_sender.clone();
-
-            for (idx, rad) in radicals_clone.iter().enumerate() {
-                let (content, tab) = create_page(idx, rad, settings_sender_1.clone());
-                boxes.insert(idx, content.rad_box);
-                notebook.append_page(&boxes[&idx], Some(&tab.tab_box));
-            }
-
-            settings_win.add(&notebook);
-            settings_win.set_title("g Factor - Radicals");
-            settings_win.set_position(gtk::WindowPosition::Center);
-            settings_win.show_all();
-
-            // Ghosting button when the Settings are opened
-            let settings_btn_clone_1 = settings_btn_clone.clone();
-            settings_btn_clone.set_sensitive(false);
-
-            settings_win.connect_delete_event(move |_, _| {
-                // Assign values here
-                settings_btn_clone_1.set_sensitive(true);
+            settings.window.connect_delete_event(move |_, _| {
+                // TODO: assign radicals to mutex
+                settings_btn_clone_1.set_sensitive(true);  // Restore button
                 gtk::Inhibit(false)
             });
+
         });
 
         // EXPERIMENTAL BUTTON
