@@ -178,6 +178,7 @@ impl Gui {
 
         // let radicals = Arc::clone(&self.sim.rads);
 
+        // Add or Del whole radicals
         let settings_btn_clone = settings_btn.clone();  // SETs BTN CLONE 00
         let nucpar_sender = self.nucpar_sender.clone();
         let radpar_sender = self.radpar_sender.clone();
@@ -186,15 +187,50 @@ impl Gui {
 
         // On clicked button
         settings_btn.connect_clicked(move |_| {
-            let settings = Settings::new(
+
+            let (refresh_settings_sender, refresh_settings_receiver) =
+                glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
+            let mut settings = Settings::new();
+
+            settings.notebook = settings.initialize(
                 Arc::clone(&arc_rads_clone),
                 nucpar_sender.clone(),
                 radpar_sender.clone(),
                 radgen_sender.clone(),
+                refresh_settings_sender.clone(),
             );
+
+            // reintegrabili
+            settings.window.add(&settings.notebook);
+            settings.window.set_title("g Factor - Radicals");
+            settings.window.set_position(gtk::WindowPosition::Center);
+            settings.window.show_all();
+            // fino a qui
 
             let settings_btn_clone_1 = settings_btn_clone.clone();  // SETs BTN CLONE 01
             settings_btn_clone.set_sensitive(false); // Ghosting button
+
+            let arc_rads_clone = Arc::clone(&arc_rads_clone); // serve
+            let nucpar_sender_clone = nucpar_sender.clone();  // servono?
+            let radpar_sender_clone = radpar_sender.clone();  // servono?
+            let radgen_sender_clone = radgen_sender.clone();  // servono?
+            let settings_clone = settings.clone();  // SE LAVORO SUL CLONE NON SI VEDE UN CAZZO!
+            // let settings_clone = Arc::clone(&settings);
+            let refresh_settings_sender_clone = refresh_settings_sender.clone();
+
+            refresh_settings_receiver.attach(None, move |signal: bool| {
+                if signal {
+                    settings_clone.refresh_notebook(
+                        Arc::clone(&arc_rads_clone),
+                        nucpar_sender_clone.clone(),
+                        radpar_sender_clone.clone(),
+                        radgen_sender_clone.clone(),
+                        refresh_settings_sender_clone.clone(),
+                    );
+                }
+                glib::Continue(true)
+            });
 
             settings.window.connect_delete_event(move |_, _| {
                 // TODO: assign radicals to mutex

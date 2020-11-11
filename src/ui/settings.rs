@@ -10,61 +10,6 @@ use std::sync::{Arc, Mutex};
 
 use crate::ent::{Radical};
 
-pub struct Tab { pub tab_box: gtk::Box, button: gtk::Button }
-
-impl Tab {
-    pub fn new_rad(rad_idx: usize, radgen_sender: glib::Sender<(usize, bool)>) -> Self {
-        let close_image = gtk::Image::from_icon_name(Some("window-close"), gtk::IconSize::Button);
-        let idx_str = "Radical ".to_owned() + &rad_idx.to_string();
-        let label = gtk::Label::new(Some(&idx_str));
-
-        let button = gtk::Button::new();
-        button.set_relief(gtk::ReliefStyle::None);
-        button.set_focus_on_click(true);
-        button.add(&close_image);
-
-        button.connect_clicked(move |_| {
-            let signal = (rad_idx, false);
-            radgen_sender.send(signal);
-        });  // Connect clicked button
-
-        let tab_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        tab_box.set_property_width_request(150 as i32);
-        tab_box.pack_start(&label, false, false, 0);
-        tab_box.pack_end(&button, false, false, 0);
-        tab_box.show_all();
-
-        Self {
-            tab_box,
-            button
-        }
-    }
-
-    pub fn tab_add_btn(radgen_sender: glib::Sender<(usize, bool)>) -> Self {
-        let add_image = gtk::Image::from_icon_name(Some("list-add"), gtk::IconSize::Button);
-        let button = gtk::Button::new();
-        button.set_relief(gtk::ReliefStyle::None);
-        button.set_focus_on_click(false);
-        button.add(&add_image);
-
-        let tab_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        tab_box.set_property_width_request(40 as i32);
-        tab_box.pack_end(&button, true, true, 0);
-        tab_box.set_homogeneous(true);
-        tab_box.show_all();
-
-        button.connect_clicked(move |_| {
-            let signal = (0, true);  // Index is useless here
-            radgen_sender.send(signal);
-        });  // Connect clicked button
-
-        Self {
-            tab_box,
-            button
-        }
-    }
-}
-
 pub struct EntryPar { buffer: gtk::EntryBuffer, widget: gtk::Entry }
 
 impl EntryPar {
@@ -213,40 +158,121 @@ impl Content {
     }  // new
 }
 
+#[derive(Clone)]
 pub struct Settings {
     pub window: gtk::Window,
+    pub notebook: gtk::Notebook,
 }
 
 impl Settings {
-    pub fn new(
+    pub fn new() -> Self {
+        Self {
+            window: gtk::Window::new(gtk::WindowType::Toplevel),
+            notebook: gtk::Notebook::new(),
+        }
+    }
+
+    pub fn initialize(
+        &self,
         rads: Arc<Mutex<Vec<Radical>>>,
         nucpar_sender: glib::Sender<(usize, usize, String, String, f64)>,
         radpar_sender: glib::Sender<(usize, String, String, f64)>,
         radgen_sender: glib::Sender<(usize, bool)>,
-        ) -> Self {
+        refresh_settings_sender: glib::Sender<bool>,
+    ) -> gtk::Notebook {
 
-        let window: gtk::Window = gtk::Window::new(gtk::WindowType::Toplevel);
+        let notebook = self.refresh_notebook(
+            rads,
+            nucpar_sender.clone(),
+            radpar_sender.clone(),
+            radgen_sender.clone(),
+            refresh_settings_sender.clone(),
+        );
+
+        // Append-radical button
+        let add_tab = self.new_tab_add_btn(radgen_sender.clone(), refresh_settings_sender.clone());  // Add radical when clicked
+        let add_content = gtk::Box::new(gtk::Orientation::Horizontal, 0);  // void box
+        notebook.append_page(&add_content, Some(&add_tab));
+
+        notebook
+    }  // new()
+
+    pub fn refresh_notebook(
+        &self,
+        rads: Arc<Mutex<Vec<Radical>>>,
+        nucpar_sender: glib::Sender<(usize, usize, String, String, f64)>,
+        radpar_sender: glib::Sender<(usize, String, String, f64)>,
+        radgen_sender: glib::Sender<(usize, bool)>,
+        refresh_settings_sender: glib::Sender<bool>,
+    ) -> gtk::Notebook {
+
         let notebook = gtk::Notebook::new();
-
         let rads_guard = Arc::clone(&rads);
         let mut rads_guard_clone = rads_guard.lock().unwrap().clone();
 
         for (idx, rad) in rads_guard_clone.iter().enumerate() {
-            let tab = Tab::new_rad(idx, radgen_sender.clone());
+            let tab = self.new_rad_tab(idx, radgen_sender.clone(), refresh_settings_sender.clone());
             let content = Content::new(idx, rad, radpar_sender.clone(), nucpar_sender.clone());
-            notebook.append_page(&content.rad_box, Some(&tab.tab_box));
+            notebook.append_page(&content.rad_box, Some(&tab));
         }
 
-        // Append-radical button
-        let add_tab = Tab::tab_add_btn(radgen_sender.clone());  // Add radical when clicked
-        let add_content = gtk::Box::new(gtk::Orientation::Horizontal, 0);  // void box
-        notebook.append_page(&add_content, Some(&add_tab.tab_box));
+        notebook
+    }
 
-        // Show window
-        window.add(&notebook);
-        window.set_title("g Factor - Radicals");
-        window.set_position(gtk::WindowPosition::Center);
-        window.show_all();
-        Self { window }
+    pub fn new_rad_tab(
+        &self,
+        rad_idx: usize,
+        radgen_sender: glib::Sender<(usize, bool)>,
+        refresh_settings_sender: glib::Sender<bool>,
+    ) -> gtk::Box {
+
+        let close_image = gtk::Image::from_icon_name(Some("window-close"), gtk::IconSize::Button);
+        let idx_str = "Radical ".to_owned() + &rad_idx.to_string();
+        let label = gtk::Label::new(Some(&idx_str));
+
+        let button = gtk::Button::new();
+        button.set_relief(gtk::ReliefStyle::None);
+        button.set_focus_on_click(true);
+        button.add(&close_image);
+
+        button.connect_clicked(move |_| {
+            let signal = (rad_idx, false);
+            radgen_sender.send(signal);
+            refresh_settings_sender.send(true);
+        });  // Connect clicked button
+
+        let tab_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        tab_box.set_property_width_request(150 as i32);
+        tab_box.pack_start(&label, false, false, 0);
+        tab_box.pack_end(&button, false, false, 0);
+        tab_box.show_all();
+
+        tab_box
+    }
+
+    pub fn new_tab_add_btn(
+        &self,
+        radgen_sender: glib::Sender<(usize, bool)>,
+        refresh_settings_sender: glib::Sender<bool>,
+    ) -> gtk::Box {
+        let add_image = gtk::Image::from_icon_name(Some("list-add"), gtk::IconSize::Button);
+        let button = gtk::Button::new();
+        button.set_relief(gtk::ReliefStyle::None);
+        button.set_focus_on_click(false);
+        button.add(&add_image);
+
+        let tab_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        tab_box.set_property_width_request(40 as i32);
+        tab_box.pack_end(&button, true, true, 0);
+        tab_box.set_homogeneous(true);
+        tab_box.show_all();
+
+        button.connect_clicked(move |_| {
+            let signal = (0, true);  // Index is useless here
+            radgen_sender.send(signal);
+            refresh_settings_sender.send(true);
+        });  // Connect clicked button
+
+        tab_box
     }
 }
