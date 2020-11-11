@@ -25,6 +25,7 @@ pub struct Gui {
     pub open_sender: glib::Sender<String>,
     pub nucpar_sender: glib::Sender<(usize, usize, String, String, f64)>,
     pub radpar_sender: glib::Sender<(usize, String, String, f64)>,
+    pub radgen_sender: glib::Sender<(usize, bool)>,  // Index + "insert to" or "remove from"
     pub sim: Simulator,
     pub chart: Chart,
 }
@@ -54,9 +55,18 @@ impl Gui {
 
         let (open_sender, open_receiver) =
             glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
+        // RADICALS
+        // Change radical parameters
         let (radpar_sender, radpar_receiver) =
             glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
+        // Change nucleus parameters
         let (nucpar_sender, nucpar_receiver) =
+            glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
+        // Add or Del whole radicals
+        let (radgen_sender, radgen_receiver) =
             glib::MainContext::channel(glib::PRIORITY_DEFAULT);
 
 
@@ -73,6 +83,15 @@ impl Gui {
 
             // Returning false here would close the receiver
             // and have senders fail
+            glib::Continue(true)
+        });
+
+        // Add or Del whole radicals RECEIVER ACTION
+        let sim_rads_clone = Arc::clone(&sim.rads);
+        radgen_receiver.attach(None, move |signal: (usize, bool)| {
+            let mut rads = sim_rads_clone.lock().unwrap();
+            if signal.1 { rads.push(Radical::electron()); }  // Add to the last position
+            else { rads.remove(signal.0); }  // Remove from index
             glib::Continue(true)
         });
 
@@ -100,6 +119,7 @@ impl Gui {
             open_sender,
             nucpar_sender,
             radpar_sender,
+            radgen_sender,
             sim,
             chart,
         }  // return Gui
@@ -161,6 +181,7 @@ impl Gui {
         let settings_btn_clone = settings_btn.clone();  // SETs BTN CLONE 00
         let nucpar_sender = self.nucpar_sender.clone();
         let radpar_sender = self.radpar_sender.clone();
+        let radgen_sender = self.radgen_sender.clone();
         let arc_rads_clone = self.sim.rads.clone();
 
         // On clicked button
@@ -169,6 +190,7 @@ impl Gui {
                 Arc::clone(&arc_rads_clone),
                 nucpar_sender.clone(),
                 radpar_sender.clone(),
+                radgen_sender.clone(),
             );
 
             let settings_btn_clone_1 = settings_btn_clone.clone();  // SETs BTN CLONE 01
